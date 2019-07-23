@@ -20,6 +20,7 @@ db,err := sql.Open("mysql","user:password@tcp(ip:port)/db")
 if err != nil {
     return err
 }
+// result shouldn't be null. if it is, please use ifnull() in sql
 rows, err := db.Query("select id,username,user_addr from table")
 if err != nil {
     return err
@@ -29,8 +30,8 @@ defer rows.Close()
 type A struct{}
 // pointer cannot be null, either is pointed to struct or slice of point to struct
 pointer1 := A{}
-err = mysqlmapper.MatchRowsToPointer(rows, &pointer1)
+err = mysqlmapper.MapRowsToPointer(rows, &pointer1)
 
 pointer2 := []*A{}
-err = mysqlmapper.MatchRowsToPointer(rows, &pointer2)
+err = mysqlmapper.MapRowsToPointer(rows, &pointer2)
 ```
