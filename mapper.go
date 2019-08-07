@@ -8,8 +8,7 @@ import (
 	"strings"
 )
 
-// NoSQLResult : no data in sql.Rows
-const NoSQLResult = "no return data from MySQL"
+const noSQLResult = "no return data from MySQL"
 
 // MapRowsToPointer : Map Mysql result rows to certain pointer
 // Parameter 1 - rows : result from MySQL
@@ -59,13 +58,21 @@ func MapRowsToPointer(rows *sql.Rows, pointer interface{}) error {
 	}
 
 	if noRowReturn {
-		return errors.New(NoSQLResult)
+		return errors.New(noSQLResult)
 	}
 
 	// set the slice pointerVal to the input pointer
 	reflect.ValueOf(pointer).Elem().Set(pointerVal.Elem())
 
 	return nil
+}
+
+// IsEmptyError check the sql result if it is error
+func IsEmptyError(err error) bool {
+	if err != nil && err.Error() == noSQLResult {
+		return true
+	}
+	return false
 }
 
 func setNilIf(v *interface{}) {
