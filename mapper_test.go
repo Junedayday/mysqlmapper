@@ -90,14 +90,14 @@ func TestParseEmptyRowToStruct(t *testing.T) {
 	onerow := mockTestEmptyRow()
 	inStruct := DemoProto{}
 	err := MapRowsToPointer(onerow, &inStruct)
-	assert.Equal(t, err, errors.New(NoSQLResult), "supposed to be no result")
+	assert.Equal(t, err, errors.New(noSQLResult), "supposed to be no result")
 }
 
 func TestParseEmptyRowToSlice(t *testing.T) {
 	onerow := mockTestEmptyRow()
 	inSlices := []*DemoProto{}
 	err := MapRowsToPointer(onerow, &inSlices)
-	assert.Equal(t, err, errors.New(NoSQLResult), "supposed to be no result")
+	assert.Equal(t, err, errors.New(noSQLResult), "supposed to be no result")
 }
 
 func TestParseOneRowToStruct(t *testing.T) {
