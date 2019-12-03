@@ -42,9 +42,10 @@ func MapRowsToPointer(rows *sql.Rows, pointer interface{}) error {
 		for i := 0; i < len(columns); i++ {
 			id, ok := indexMatch[i]
 			if !ok {
-				return fmt.Errorf("col %v unmatch the struct", columns[i])
+				onerow[i] = new(sql.RawBytes)
+			} else {
+				onerow[i] = s.Field(id).Addr().Interface()
 			}
-			onerow[i] = s.Field(id).Addr().Interface()
 		}
 		if err := rows.Scan(onerow...); err != nil {
 			return fmt.Errorf("scan problem %v", err)
@@ -123,8 +124,6 @@ func matchColsToStruct(columns []string, mp map[string]int) map[int]int {
 	for index, name := range columns {
 		if id, ok := mp[name]; ok {
 			structToColumn[index] = id
-		} else {
-			panic(name + " must be found in query struct ")
 		}
 	}
 	return structToColumn
