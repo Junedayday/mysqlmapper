@@ -14,17 +14,23 @@ const noSQLResult = "no return data from MySQL"
 // Parameter 1 - rows : result from MySQL
 // Parameter 2 - pointer : must be the pointer of the struct or slice
 func MapRowsToPointer(rows *sql.Rows, pointer interface{}) error {
-	pointerVal := reflect.ValueOf(pointer)
-	isStruct := mustBeStructorSlice(pointerVal)
-
 	var nameMapperID map[string]int
 	var oneRowType reflect.Type
-	if !isStruct {
-		nameMapperID = parseStructMemberNames(pointerVal.Elem().Type().Elem())
-		oneRowType = pointerVal.Elem().Type().Elem()
-	} else {
+	var isStruct bool
+	pointerVal := reflect.ValueOf(pointer)
+
+	if reflect.ValueOf(pointer).Kind() != reflect.Ptr {
+		return fmt.Errorf("input type must be ptr")
+	} else if reflect.ValueOf(pointer).Elem().Kind() == reflect.Struct {
+		isStruct = true
 		nameMapperID = parseStructMemberNames(pointerVal.Type())
-		oneRowType = pointerVal.Type()
+		oneRowType = pointerVal.Type().Elem()
+	} else if reflect.ValueOf(pointer).Elem().Kind() == reflect.Slice {
+		isStruct = false
+		nameMapperID = parseStructMemberNames(pointerVal.Elem().Type().Elem())
+		oneRowType = pointerVal.Elem().Type().Elem().Elem()
+	} else {
+		return fmt.Errorf("input pointer must point to struct or slice,but %v", reflect.ValueOf(pointer).Elem().Kind())
 	}
 
 	columns, err := rows.Columns()
@@ -34,23 +40,19 @@ func MapRowsToPointer(rows *sql.Rows, pointer interface{}) error {
 	indexMatch := matchColsToStruct(columns, nameMapperID)
 
 	noRowReturn := true
+	oneRow := make([]interface{}, len(columns))
+	for j := 0; j < len(oneRow); j++ {
+		oneRow[j] = new(sql.RawBytes)
+	}
 	for rows.Next() {
 		noRowReturn = false
-		oneRowStruct := reflect.New(oneRowType.Elem()).Interface()
+		// Instance a struct for scanning
+		oneRowStruct := reflect.New(oneRowType).Interface()
 		s := reflect.ValueOf(oneRowStruct).Elem()
-		onerow := make([]interface{}, len(columns))
-		for i := 0; i < len(columns); i++ {
-			id, ok := indexMatch[i]
-			if !ok {
-				onerow[i] = new(sql.RawBytes)
-			} else {
-				onerow[i] = s.Field(id).Addr().Interface()
-			}
+		for src, target := range indexMatch {
+			oneRow[src] = s.Field(target).Addr().Interface()
 		}
-		if err := rows.Scan(onerow...); err != nil {
-			return fmt.Errorf("scan problem %v", err)
-		}
-
+		rows.Scan(oneRow...)
 		if isStruct {
 			reflect.ValueOf(pointer).Elem().Set(reflect.ValueOf(oneRowStruct).Elem())
 			return nil
@@ -76,26 +78,9 @@ func IsEmptyError(err error) bool {
 	return false
 }
 
-func setNilIf(v *interface{}) {
-	*v = nil
-}
-
-func mustBeStructorSlice(pointerVal reflect.Value) (isStruct bool) {
-	if pointerVal.Kind() != reflect.Ptr {
-		panic(fmt.Sprintf("input value must be a pointer,but %v", pointerVal.Kind()))
-	} else if pointerVal.Elem().Kind() == reflect.Struct {
-		isStruct = true
-	} else if pointerVal.Elem().Kind() == reflect.Slice {
-		isStruct = false
-	} else if pointerVal.Elem().Kind() != reflect.Struct {
-		panic(fmt.Sprintf("input pointer must point to struct or slice,but %v", pointerVal.Elem().Kind()))
-	}
-	return
-}
-
 func parseStructMemberNames(pt reflect.Type) map[string]int {
-	nameMapperID := make(map[string]int)
 	el := pt.Elem()
+	nameMapperID := make(map[string]int, el.NumField())
 	for i := 0; i < el.NumField(); i++ {
 		// parse definition in "json:..." in Tags
 		// if not find, then transfer name to snake type

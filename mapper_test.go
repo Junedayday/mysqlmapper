@@ -12,12 +12,10 @@ import (
 
 // proto3 def
 type DemoProto struct {
-	Id                   int32    `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Username             string   `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
-	UserAddr             string   `protobuf:"bytes,3,opt,name=user_addr,proto3" json:"user_addr,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Id       int32   `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Username string  `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	UserAddr string  `protobuf:"bytes,3,opt,name=user_addr,proto3" json:"user_addr,omitempty"`
+	Money    float64 `protobuf:"bytes,4,opt,name=money,proto3" json:"money,omitempty"`
 }
 
 // ordinary struct def
@@ -25,6 +23,14 @@ type DemoNoJSONTag struct {
 	Id       int32
 	Username string
 	UserAddr string
+	Money    float64
+}
+
+type NotMatchColumns struct {
+	Id       int32
+	Username string
+	User     string
+	Money    float64
 }
 
 func mockRowsToSQLRows(mockRows *sqlmock.Rows) *sql.Rows {
@@ -34,134 +40,187 @@ func mockRowsToSQLRows(mockRows *sqlmock.Rows) *sql.Rows {
 	return rows
 }
 
-func mockTestEmptyRow() *sql.Rows {
-	mockrows := sqlmock.NewRows([]string{"id", "username", "user_addr"})
-	return mockRowsToSQLRows(mockrows)
+func mockRawRow() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{"id", "username", "user_addr", "money"})
 }
 
-func mockTestOneRow() *sql.Rows {
-	mockrows := sqlmock.NewRows([]string{"id", "username", "user_addr"}).
-		AddRow(1, "name1", "addr1")
-	return mockRowsToSQLRows(mockrows)
-}
-
-func mockTestMultiRows() *sql.Rows {
-	mockrows := sqlmock.NewRows([]string{"id", "username", "user_addr"}).
-		AddRow(1, "name1", "addr1").
-		AddRow(2, "name2", "addr2").
-		AddRow(3, "name3", "addr3")
-	return mockRowsToSQLRows(mockrows)
-}
-
-func TestParseJsonStruct(t *testing.T) {
-	demo := &DemoProto{}
-	jsonMapper := parseStructMemberNames(reflect.TypeOf(demo))
-	for jsonname, id := range jsonMapper {
-		if id == 0 {
-			assert.Equal(t, "id", jsonname, "id not match")
-		} else if id == 1 {
-			assert.Equal(t, "username", jsonname, "username not match")
-		} else if id == 2 {
-			assert.Equal(t, "user_addr", jsonname, "user_addr not match")
-		} else {
-			t.Errorf("unexpected id %v jsonname %v", id, jsonname)
-		}
+func mockNRows(n int) *sql.Rows {
+	mock := mockRawRow()
+	for i := 0; i < n; i++ {
+		mock = mock.AddRow(10, "name1", "addr1", 1.32)
 	}
+	return mockRowsToSQLRows(mock)
 }
 
-func TestParseNoJsonStruct(t *testing.T) {
-	demo := &DemoNoJSONTag{}
-	jsonMapper := parseStructMemberNames(reflect.TypeOf(demo))
-	// t.Errorf("%#v", jsonMapper)
-	for jsonname, id := range jsonMapper {
-		if id == 0 {
-			assert.Equal(t, "id", jsonname, "id not match")
-		} else if id == 1 {
-			assert.Equal(t, "username", jsonname, "username not match")
-		} else if id == 2 {
-			assert.Equal(t, "user_addr", jsonname, "user_addr not match")
-		} else {
-			t.Errorf("unexpected id %v jsonname %v", id, jsonname)
-		}
-	}
+func mockNotMatch2Rows() *sql.Rows {
+	mock := mockRawRow()
+	mock = mock.AddRow(10, "", "addr1", 1.32).AddRow(11, "name1", "addr1", 0)
+	return mockRowsToSQLRows(mock)
 }
 
-func TestParseEmptyRowToStruct(t *testing.T) {
-	onerow := mockTestEmptyRow()
-	inStruct := DemoProto{}
-	err := MapRowsToPointer(onerow, &inStruct)
-	assert.Equal(t, err, errors.New(noSQLResult), "supposed to be no result")
-}
-
-func TestParseEmptyRowToSlice(t *testing.T) {
-	onerow := mockTestEmptyRow()
-	inSlices := []*DemoProto{}
-	err := MapRowsToPointer(onerow, &inSlices)
-	assert.Equal(t, err, errors.New(noSQLResult), "supposed to be no result")
-}
-
-func TestParseOneRowToStruct(t *testing.T) {
-	onerow := mockTestOneRow()
-	inStruct := DemoProto{}
-	err := MapRowsToPointer(onerow, &inStruct)
-	assert.Nil(t, err)
+func checkProto(in DemoProto) bool {
 	expected := DemoProto{
-		Id:       1,
+		Id:       10,
 		Username: "name1",
 		UserAddr: "addr1",
+		Money:    1.32,
 	}
-	assert.Equal(t, expected, inStruct, "result not match")
+	return reflect.DeepEqual(in, expected)
 }
 
-func TestParseOneRowToSlice(t *testing.T) {
-	onerow := mockTestOneRow()
-	inSlices := []*DemoProto{}
-	err := MapRowsToPointer(onerow, &inSlices)
-	assert.Nil(t, err)
-	for _, v := range inSlices {
-		expected := &DemoProto{
-			Id:       1,
-			Username: "name1",
-			UserAddr: "addr1",
+func checkProtoSlice(in []*DemoProto) bool {
+	for _, v := range in {
+		if !checkProto(*v) {
+			return false
 		}
-		assert.Equal(t, expected, v, "result not match")
 	}
+	return true
 }
 
-func TestParseMutliRowsToStruct(t *testing.T) {
-	multiRows := mockTestMultiRows()
-	inStruct := DemoProto{}
-	err := MapRowsToPointer(multiRows, &inStruct)
-	assert.Nil(t, err)
-	expected := DemoProto{
-		Id:       1,
+func checkStruct(in DemoNoJSONTag) bool {
+	expected := DemoNoJSONTag{
+		Id:       10,
 		Username: "name1",
 		UserAddr: "addr1",
+		Money:    1.32,
 	}
-	assert.Equal(t, expected, inStruct, "result not match")
+	return reflect.DeepEqual(in, expected)
 }
 
-func TestParseMutliRowsToSlice(t *testing.T) {
-	multiRows := mockTestMultiRows()
-	inSlices := []*DemoProto{}
-	err := MapRowsToPointer(multiRows, &inSlices)
-	assert.Nil(t, err)
-	expected := []*DemoProto{
-		&DemoProto{
-			Id:       1,
-			Username: "name1",
-			UserAddr: "addr1",
-		},
-		&DemoProto{
-			Id:       2,
-			Username: "name2",
-			UserAddr: "addr2",
-		},
-		&DemoProto{
-			Id:       3,
-			Username: "name3",
-			UserAddr: "addr3",
-		},
+func checkStructSlice(in []*DemoNoJSONTag) bool {
+	for _, v := range in {
+		if !checkStruct(*v) {
+			return false
+		}
 	}
-	assert.Equal(t, expected, inSlices, "result not match")
+	return true
+}
+
+func TestParseEmptyRow(t *testing.T) {
+	inProto := DemoProto{}
+	assert.Equal(t, MapRowsToPointer(mockNRows(0), &inProto), errors.New(noSQLResult), "supposed to be no result")
+
+	var inProtoSlice []*DemoProto
+	assert.Equal(t, MapRowsToPointer(mockNRows(0), &inProtoSlice), errors.New(noSQLResult), "supposed to be no result")
+
+	inStruct := DemoNoJSONTag{}
+	assert.Equal(t, MapRowsToPointer(mockNRows(0), &inStruct), errors.New(noSQLResult), "supposed to be no result")
+
+	var inStructSlice []*DemoNoJSONTag
+	assert.Equal(t, MapRowsToPointer(mockNRows(0), &inStructSlice), errors.New(noSQLResult), "supposed to be no result")
+}
+
+func TestParseOneRow(t *testing.T) {
+	inProto := DemoProto{}
+	assert.Equal(t, MapRowsToPointer(mockNRows(1), &inProto), nil)
+	assert.Equal(t, checkProto(inProto), true)
+
+	var inProtoSlice []*DemoProto
+	assert.Equal(t, MapRowsToPointer(mockNRows(1), &inProtoSlice), nil)
+	assert.Equal(t, checkProtoSlice(inProtoSlice), true)
+
+	inStruct := DemoNoJSONTag{}
+	assert.Equal(t, MapRowsToPointer(mockNRows(1), &inStruct), nil)
+	assert.Equal(t, checkStruct(inStruct), true)
+
+	var inStructSlice []*DemoNoJSONTag
+	assert.Equal(t, MapRowsToPointer(mockNRows(1), &inStructSlice), nil)
+	assert.Equal(t, checkStructSlice(inStructSlice), true)
+}
+
+func TestParse100Rows(t *testing.T) {
+	var inProtoSlice []*DemoProto
+	assert.Equal(t, MapRowsToPointer(mockNRows(100), &inProtoSlice), nil)
+	assert.Equal(t, checkProtoSlice(inProtoSlice), true)
+
+	var inStructSlice []*DemoNoJSONTag
+	assert.Equal(t, MapRowsToPointer(mockNRows(100), &inStructSlice), nil)
+	assert.Equal(t, checkStructSlice(inStructSlice), true)
+}
+
+func TestParseNotMatchColumns(t *testing.T) {
+	inProto := NotMatchColumns{}
+	assert.Equal(t, MapRowsToPointer(mockNRows(1), &inProto), nil)
+	expected := NotMatchColumns{
+		Id:       10,
+		Username: "name1",
+		User:     "",
+		Money:    1.32,
+	}
+	assert.Equal(t, inProto, expected)
+
+	var inNotMatchSlice []*NotMatchColumns
+	assert.Equal(t, MapRowsToPointer(mockNotMatch2Rows(), &inNotMatchSlice), nil)
+	expected1 := NotMatchColumns{
+		Id:       10,
+		Username: "",
+		User:     "",
+		Money:    1.32,
+	}
+	expected2 := NotMatchColumns{
+		Id:       11,
+		Username: "name1",
+		User:     "",
+		Money:    0,
+	}
+	assert.Equal(t, *inNotMatchSlice[0], expected1)
+	assert.Equal(t, *inNotMatchSlice[1], expected2)
+}
+
+func BenchmarkMapOneRowToPointerForTag(b *testing.B) {
+	data := mockNRows(1)
+	var inProtoSlice []*DemoProto
+	err := MapRowsToPointer(data, &inProtoSlice)
+	assert.Equal(b, err, nil)
+	assert.Equal(b, checkProtoSlice(inProtoSlice), true)
+}
+
+func BenchmarkMapOneRowToPointerForStruct(b *testing.B) {
+	data := mockNRows(1)
+	var inStructSlice []*DemoNoJSONTag
+	err := MapRowsToPointer(data, &inStructSlice)
+	assert.Equal(b, err, nil)
+	assert.Equal(b, checkStructSlice(inStructSlice), true)
+}
+
+func BenchmarkOneRowOfficialMethod(b *testing.B) {
+	data := mockNRows(1)
+	var inStructSlice []*DemoNoJSONTag
+	for data.Next() {
+		var d = new(DemoNoJSONTag)
+		if err := data.Scan(&d.Id, &d.Username, &d.UserAddr, &d.Money); err != nil {
+			b.Fatalf("error in scan %v", err)
+		}
+		inStructSlice = append(inStructSlice, d)
+	}
+	assert.Equal(b, checkStructSlice(inStructSlice), true)
+}
+
+func BenchmarkMapRowsToPointerForTag(b *testing.B) {
+	data := mockNRows(10000)
+	var inProtoSlice []*DemoProto
+	err := MapRowsToPointer(data, &inProtoSlice)
+	assert.Equal(b, err, nil)
+	assert.Equal(b, checkProtoSlice(inProtoSlice), true)
+}
+
+func BenchmarkMapRowsToPointerForStruct(b *testing.B) {
+	data := mockNRows(10000)
+	var inStructSlice []*DemoNoJSONTag
+	err := MapRowsToPointer(data, &inStructSlice)
+	assert.Equal(b, err, nil)
+	assert.Equal(b, checkStructSlice(inStructSlice), true)
+}
+
+func BenchmarkOfficialMethod(b *testing.B) {
+	data := mockNRows(10000)
+	var inStructSlice []*DemoNoJSONTag
+	for data.Next() {
+		var d = new(DemoNoJSONTag)
+		if err := data.Scan(&d.Id, &d.Username, &d.UserAddr, &d.Money); err != nil {
+			b.Fatalf("error in scan %v", err)
+		}
+		inStructSlice = append(inStructSlice, d)
+	}
+	assert.Equal(b, checkStructSlice(inStructSlice), true)
 }
