@@ -16,6 +16,7 @@ type DemoProto struct {
 	Username string  `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	UserAddr string  `protobuf:"bytes,3,opt,name=user_addr,proto3" json:"user_addr,omitempty"`
 	Money    float64 `protobuf:"bytes,4,opt,name=money,proto3" json:"money,omitempty"`
+	UnitName string   `protobuf:"bytes,5,opt,name=unit_name,json=unitName,proto3" json:"unit_name,omitempty"`
 }
 
 // ordinary struct def
@@ -94,6 +95,19 @@ func checkStructSlice(in []*DemoNoJSONTag) bool {
 		}
 	}
 	return true
+}
+
+func TestParseNil(t *testing.T) {
+	mock := sqlmock.NewRows([]string{"id", "username", "unit_name", "money"}).AddRow(10,nil, "addr1", 1.32).AddRow(11, "name1", "addr1", 0)
+	re:=mockRowsToSQLRows(mock)
+	var inProtoSlice []*DemoProto
+	assert.Equal(t, nil,MapRowsToPointer(re, &inProtoSlice))
+	expected := DemoProto{
+		Id:       10,
+		UnitName: "addr1",
+		Money:    1.32,
+	}
+	assert.Equal(t, expected,*inProtoSlice[0])
 }
 
 func TestParseEmptyRow(t *testing.T) {
