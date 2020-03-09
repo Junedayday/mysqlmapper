@@ -51,8 +51,9 @@ func MapRowsToPointer(rows *sql.Rows, pointer interface{}) error {
 		s := reflect.ValueOf(oneRowStruct).Elem()
 		for src, target := range indexMatch {
 			oneRow[src] = s.Field(target).Addr().Interface()
+			rows.Scan(oneRow...)
+			oneRow[src] = new(sql.RawBytes)
 		}
-		rows.Scan(oneRow...)
 		if isStruct {
 			reflect.ValueOf(pointer).Elem().Set(reflect.ValueOf(oneRowStruct).Elem())
 			return nil
