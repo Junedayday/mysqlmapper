@@ -79,6 +79,14 @@ func IsEmptyError(err error) bool {
 	return false
 }
 
+// IsCriticalError check the sql result is error and not nil
+func IsCriticalError(err error) bool {
+	if err != nil && err.Error() != noSQLResult {
+		return true
+	}
+	return false
+}
+
 func parseStructMemberNames(pt reflect.Type) map[string]int {
 	el := pt.Elem()
 	nameMapperID := make(map[string]int, el.NumField())
